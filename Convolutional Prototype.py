@@ -15,55 +15,27 @@ Multithreading utilized for building datasets (still slow)
 def main():
     print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
 
+    epochCount = 0
+
+    print("Loading Model")
     model = tf.keras.models.load_model('Conv.h5') #load from presaved model
-    model = genModel() #uncomment to generate new model
+    #model = genModel() #uncomment to generate new model
+
+    #loading raw data for simulation
+    print("Raw Data")
+    print("-----------------------------------------------")
+    recent = loadDataRaw("recent.csv") #unused
+    data = loadDataRaw("Data.csv") #S&P 2000-2019
+    validationData = loadDataRaw("Data2.csv") #S&P 1980-2000
+    BTCData = loadDataRaw("BTC.csv") #BTC data where volume > 0
 
     #loading different datasets
-    recent = loadData("recent.csv") #unused
-    data = loadData("Data.csv") 
-    validationData = loadData("validate.csv")
-    BTCData = loadData("BTC.csv")
-    
-    
-    
-    
-    '''
-    Generate 3 different datasets for training/testing/validation
-    data = S&P last 20 years
-    validationData = S&P 1990 - 2000
-    BTC Data = recent BTC data (~3-4 years)
+    print("Datasets")
+    print("-----------------------------------------------")
+    train = loadData("train.csv") 
+    validate = loadData("validate.csv")
+    validateBTC = loadData("validateBTC.csv")
 
-    Multithreading utilized to generate them synchronously 
-    '''
-    print("Building Set")
-
-    inputs = [] #array or input arrays
-    outputs = [] #array of output arrays
-    
-    inputValidate = []
-    outputValidate = []
-
-    inputBTC = []
-    outputBTC = []
-
-    threads = []
-    
-    t = threading.Thread(target=buildDataset, args=(inputs, outputs, data))
-    t.start()
-    threads.append(t)
-    
-    t = threading.Thread(target=buildDataset, args=(inputValidate, outputValidate, validationData))
-    t.start()
-    threads.append(t)
-
-    t = threading.Thread(target=buildDataset, args=(inputBTC, outputBTC, BTCData))
-    t.start()
-    threads.append(t)
-
-    '''
-    End of generating datasets
-    '''
-    
     print(model.summary()) #preview of model structure
 
     #training settings
@@ -77,23 +49,35 @@ def main():
     )
     model.compile(loss='mean_squared_error', optimizer=adam, metrics=['binary_accuracy', tf.keras.metrics.FalsePositives(), tf.keras.metrics.FalseNegatives()])
 
-    #rejoin dataset threads before training
-    for proc in threads:
-        proc.join()
-
-
     '''
     Inputs and outputs to be trained on
     Add extra data here
     '''
-    allInputs = inputValidate
+    print("Inserting preformatted data")
+    inputs = []
+    outputs = []
+    for i in range(len(train)):
+        inputs.append(train.loc[i][0:365])
+        outputs.append(train.loc[i][365:367])
 
-    allOutputs = outputValidate
+    inputValidate = []
+    outputValidate = []
+    for i in range(len(validate)):
+        inputValidate.append(validate.loc[i][0:365])
+        outputValidate.append(validate.loc[i][365:367])
+
+    inputBTC = []
+    outputBTC = []
+    for i in range(len(validateBTC)):
+        inputBTC.append(validateBTC.loc[i][0:365])
+        outputBTC.append(validateBTC.loc[i][365:367])
+
+    allInputs = inputs
+    allOutputs = outputs
+                         
     '''
     End of generating training set
     '''
-
-    
 
     '''
     Shuffle dataset and format for training method
@@ -101,22 +85,58 @@ def main():
     Cast to np array
     '''
     print("Shuffling dataset")
+    allInputs = np.array(allInputs)
+    allOutputs = np.array(allOutputs)
     
     sets = list(zip(allInputs, allOutputs))
     random.shuffle(sets)
 
     allInputs, allOutputs = zip(*sets)
+
+    '''
+    Balance outputs
+    '''
+    print("Balancing Data")
+    trainIn = []
+    trainOut = []
+
+    numBullish = 0
+    numBearish = 0
+    for i in range(len(allOutputs)):
+        if allOutputs[i][0] == 1:
+            numBullish = numBullish + 1
+        elif allOutputs[i][1] == 1:
+            numBearish = numBearish + 1
+
+    midway = min(numBullish, numBearish)
+    
+    numBullish = 0
+    numBearish = 0
+    for i in range(len(allOutputs)):
+        if allOutputs[i][0] == 1:
+            numBullish = numBullish + 1
+            if numBullish <= midway:
+                trainIn.append(allInputs[i])
+                trainOut.append(allOutputs[i])
+        elif allOutputs[i][1] == 1:
+            numBearish = numBearish + 1
+            if numBearish <= midway:
+                trainIn.append(allInputs[i])
+                trainOut.append(allOutputs[i])
+
+    allInputs = np.array(trainIn)
+    allOutputs = np.array(trainOut)
+    
     allInputs = np.expand_dims(allInputs, axis=2)
 
-    allInputs = np.array(allInputs)
-    allOutputs = np.array(allOutputs)
 
     '''
     End of formatting and shuffling data
     '''
-    
+    print("Starting training")
     #train using batch size 64
-    model.fit(allInputs, allOutputs, batch_size = 64, epochs=1000, use_multiprocessing = True, verbose=2)
+    model.fit(allInputs, allOutputs, batch_size = 64, epochs=epochCount, use_multiprocessing = True, verbose=2)
+    print("Saving model")
     model.save('Conv.h5') #save trained model
     #testing on validation sets
 
@@ -165,11 +185,13 @@ def main():
     results = []
     results2 = []
     results3 = []
+
+    threads = []
     
     t = threading.Thread(target=simulate, args=(results, model, data, inputs, outputs, 1, 0.75, 0, len(inputs)))
     t.start()
     threads.append(t)
-
+    
     t = threading.Thread(target=simulate, args=(results2, model, validationData, inputValidate, outputValidate, 1, 0.75, 0, len(inputValidate)))
     t.start()
     threads.append(t)
@@ -210,64 +232,59 @@ def genModel():
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.InputLayer(input_shape=(365,1)))
     
-    model.add(tf.keras.layers.Conv1D(kernel_size=5, filters=10, activation='tanh'))
-    model.add(tf.keras.layers.AveragePooling1D(pool_size=5,strides=2))
+    model.add(tf.keras.layers.Conv1D(kernel_size=3, filters=16, activation='tanh'))
+    
+    model.add(tf.keras.layers.AveragePooling1D(pool_size=2,strides=2))
+    model.add(tf.keras.layers.Conv1D(kernel_size=1, filters=8, activation='tanh'))
+    model.add(tf.keras.layers.AveragePooling1D(pool_size=2,strides=1))
+    
+    model.add(tf.keras.layers.Conv1D(kernel_size=1, filters=4, activation='tanh'))
+    model.add(tf.keras.layers.Conv1D(kernel_size=3, filters=8, activation='tanh'))
+    model.add(tf.keras.layers.Conv1D(kernel_size=1, filters=4, activation='tanh'))
 
-    model.add(tf.keras.layers.Conv1D(kernel_size=5, filters=10, activation='tanh'))
-    model.add(tf.keras.layers.AveragePooling1D(pool_size=5,strides=2))
+    model.add(tf.keras.layers.AveragePooling1D(pool_size=2,strides=2))
+    model.add(tf.keras.layers.Conv1D(kernel_size=1, filters=16, activation='tanh'))
+    model.add(tf.keras.layers.AveragePooling1D(pool_size=2,strides=1))
 
-    model.add(tf.keras.layers.Conv1D(kernel_size=5, filters=10, activation='tanh'))
-    model.add(tf.keras.layers.AveragePooling1D(pool_size=5,strides=2))
+    model.add(tf.keras.layers.Conv1D(kernel_size=1, filters=8, activation='tanh'))
+    model.add(tf.keras.layers.Conv1D(kernel_size=3, filters=16, activation='tanh'))
+    model.add(tf.keras.layers.Conv1D(kernel_size=1, filters=8, activation='tanh'))
+    
+    
+    
+    '''
+    Tweak 2nd last layers and last layer
+    Fix last layer stride = 1/2 and filters = 5/10
+    
+     
+    model.add(tf.keras.layers.Conv1D(kernel_size=3, filters=5, activation='tanh'))
+    model.add(tf.keras.layers.AveragePooling1D(pool_size=3,strides=1))
 
-    model.add(tf.keras.layers.Conv1D(kernel_size=5, filters=10, activation='tanh'))
-    model.add(tf.keras.layers.AveragePooling1D(pool_size=5,strides=2))
+    model.add(tf.keras.layers.Conv1D(kernel_size=3, filters=10, activation='tanh'))
+    model.add(tf.keras.layers.AveragePooling1D(pool_size=3,strides=2))
+
+    model.add(tf.keras.layers.Conv1D(kernel_size=1, filters=10, activation='tanh'))
+    model.add(tf.keras.layers.AveragePooling1D(pool_size=3,strides=1))
+    '''
     
     model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(2, activation='sigmoid')) #output layer with 1 node
-    model.compile(loss='mean_squared_error', optimizer='adam', metrics=['binary_accuracy'])
+    model.add(tf.keras.layers.Dense(2, activation='sigmoid')) #output layer with 2 nodes
     return model
 
-#loads data from path into a csv file, column is named "Change"
+#loads data from csv file to rows of inputs + outputs
 def loadData(path):
+    print("Loading", path, end="...", flush=True)
+    data = pd.read_csv(path)
+    print(" Done")
+    return data
+
+#loads data from path into a csv file, column is named "Change"
+def loadDataRaw(path):
     print("Loading", path, end="...", flush=True)
     data = pd.read_csv(path, names = ["Change"])
     print(" Done")
     return data
 
-#builds a dataset given data is greater than 365
-#multithreading utilized to speed up the for loop
-def buildDataset(inputs, outputs, data):
-    #build dataset
-    #ignore last 7 days because can't extract an input/output value out of range
-    threads = []
-    for i in range(len(data["Change"]) - 365):
-        t = threading.Thread(target=buildDatasetHelper, args=(inputs, outputs, data, i))
-        t.start()
-        threads.append(t)
-        
-    for proc in threads:
-        proc.join()
-        
-    print("Done building set")
-
-#used in buildDataset
-def buildDatasetHelper(inputs, outputs, data, i):
-        temp = []
-        m = -100 #local max
-        for j in range(i, i+365): #getting max among local inputs
-            m = max(m, abs(data["Change"][j]))
-        m = max(m, abs(data["Change"][i+365])) #check if output is a max
-        for j in range(i, i+365):
-            temp.append(data["Change"][j]/m) #insert into temp input array
-        inputs.append(temp) #insert input array into array of inputs
-        future = data["Change"][i+365] #value we want to predict
-        if future > 0: #if bullish, set expected output to 1
-            outputs.append([1,0])
-        elif future < 0: #else if bearish, set expected output to -1
-            outputs.append([0,1])
-        else: #else the percent change is 0, set expected output to 0
-            outputs.append([0,0])
-            
 #test using user input
 def test(model, data, inputs, outputs):
     user = 0
@@ -289,8 +306,10 @@ def predict(model, data, inputs, outputs, day):
 
 #simulate automated trading using given model and input data
 def simulate(results, model, data, inputs, outputs, buyIn, threshold, entryDay, exitDay):
-    money = market = buyIn
-    curr = asset = 0
+    money = (buyIn+0)
+    market = (buyIn + 0)
+    curr = 0
+    asset = 0
 
     bot = [] #contains simulated gain/loss from trading
     economy = [] #contains market values
@@ -312,6 +331,47 @@ def simulate(results, model, data, inputs, outputs, buyIn, threshold, entryDay, 
         elif a[0][1] > threshold: #sell flag
             money = money + asset
             asset = 0
+        curr = money + asset #total value held by bot
+
+        '''
+        if curr < prev:
+            print("Loss: ", curr, "\tMarket: ", market)
+        else:
+            print("Gain: ", curr, "\tMarket: ", market)
+        '''
+    print("Bot: ", curr, "\tMarket: ", market) #prints end values
+    
+    results.append(day)
+    results.append(bot)
+    results.append(economy)
+
+#simulate automated trading using given model and input data
+def simulateExper(results, model, data, inputs, outputs, buyIn, threshold, entryDay, exitDay):
+    money = (buyIn+0)
+    market = (buyIn + 0)
+    curr = 0
+    asset = 0
+
+    bot = [] #contains simulated gain/loss from trading
+    economy = [] #contains market values
+    day = [] #contains i values
+    for i in range(entryDay, exitDay):
+        prev = money + asset #prev day (initialized to buyIn)
+        prevMarket = market #prev day market price (initialized to buyIn)
+        
+        day.append(i)
+        bot.append(prev)
+        economy.append(prevMarket)
+        
+        a = model.predict(np.array([inputs[i]]))
+        asset = asset + asset * float(data["Change"][i+365]) #modify asset based on price change if asset > 0
+        market = market + market * float(data["Change"][i+365]) #modify market price based on price change
+        if a[0][0] > threshold: #buy flag
+            asset = asset + money*(0.01)
+            money = money - money*(0.01)
+        elif a[0][1] > threshold: #sell flag
+            money = money + asset*(0.5)
+            asset = asset*(0.5)
         curr = money + asset #total value held by bot
 
         '''
