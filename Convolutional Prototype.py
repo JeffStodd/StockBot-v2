@@ -22,22 +22,25 @@ def main():
     #model = genModel() #uncomment to generate new model
 
     #loading raw data for simulation
-    print("Raw Data")
-    print("-----------------------------------------------")
-    recent = loadDataRaw("recent.csv") #unused
+    print("\nRaw Data")
+    print("-----------------------------------------------------------------")
+    recentData = loadDataRaw("recent.csv") #unused
     data = loadDataRaw("Data.csv") #S&P 2000-2019
     validationData = loadDataRaw("Data2.csv") #S&P 1980-2000
     BTCData = loadDataRaw("BTC.csv") #BTC data where volume > 0
 
     #loading different datasets
-    print("Datasets")
-    print("-----------------------------------------------")
+    print("\nDatasets")
+    print("-----------------------------------------------------------------")
+    validateRecent = loadData("validateRecent.csv")
     train = loadData("train.csv") 
     validate = loadData("validate.csv")
     validateBTC = loadData("validateBTC.csv")
 
+    print("-----------------------------------------------------------------")
     print(model.summary()) #preview of model structure
-
+    print("-----------------------------------------------------------------")
+    
     #training settings
     adam = tf.keras.optimizers.Adam(
         learning_rate=0.001,
@@ -72,6 +75,13 @@ def main():
         inputBTC.append(validateBTC.loc[i][0:365])
         outputBTC.append(validateBTC.loc[i][365:367])
 
+    recentInput = []
+    recentOutput = []
+    for i in range(len(validateRecent)):
+        recentInput.append(validateRecent.loc[i][0:365])
+        recentOutput.append(validateRecent.loc[i][365:367])
+    
+
     allInputs = inputs
     allOutputs = outputs
                          
@@ -96,7 +106,7 @@ def main():
     '''
     Balance outputs
     '''
-    print("Balancing Data")
+    print("Balancing data")
     trainIn = []
     trainOut = []
 
@@ -154,6 +164,11 @@ def main():
     inputBTC = np.expand_dims(inputBTC, axis=2)
     inputBTC = np.array(inputBTC)
     outputBTC = np.array(outputBTC)
+
+    recentInput = np.expand_dims(recentInput, axis=2)
+    recentInput = np.array(recentInput)
+    recentOutput = np.array(outputBTC)
+    
     '''
     End of formatting datasets
     '''
@@ -185,7 +200,8 @@ def main():
     results = []
     results2 = []
     results3 = []
-
+    results4 = []
+    
     threads = []
     
     t = threading.Thread(target=simulate, args=(results, model, data, inputs, outputs, 1, 0.75, 0, len(inputs)))
@@ -197,6 +213,10 @@ def main():
     threads.append(t)
 
     t = threading.Thread(target=simulate, args=(results3, model, BTCData, inputBTC, outputBTC, 1, 0.75, 0, len(inputBTC)))
+    t.start()
+    threads.append(t)
+
+    t = threading.Thread(target=simulate, args=(results4, model, recentData, recentInput, recentOutput, 1, 0.75, 0, len(inputs)))
     t.start()
     threads.append(t)
 
@@ -217,6 +237,11 @@ def main():
     plt.figure()
     plt.plot(results3[0], results3[1], label='Automated Trading')
     plt.plot(results3[0], results3[2], label='BTC')
+    plt.legend(loc='upper left')
+
+    plt.figure()
+    plt.plot(results4[0], results4[1], label='Automated Trading')
+    plt.plot(results4[0], results4[2], label='Recent S&P 500')
     plt.legend(loc='upper left')
     
     plt.show()

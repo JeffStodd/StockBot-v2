@@ -18,6 +18,8 @@ def main():
 
     validateBTC = []
 
+    validateRecent = []
+
     threads = []
     
     t = threading.Thread(target=buildDataset, args=(train, data))
@@ -29,6 +31,10 @@ def main():
     threads.append(t)
 
     t = threading.Thread(target=buildDataset, args=(validateBTC, BTCData))
+    t.start()
+    threads.append(t)
+
+    t = threading.Thread(target=buildDataset, args=(validateRecent, recent))
     t.start()
     threads.append(t)
 
@@ -45,6 +51,10 @@ def main():
         wtr.writerows(validate)
 
     with open('validateBTC.csv', 'w', newline='') as f:
+        wtr = csv.writer(f, delimiter= ',')
+        wtr.writerows(validateBTC)
+
+    with open('validateRecent.csv', 'w', newline='') as f:
         wtr = csv.writer(f, delimiter= ',')
         wtr.writerows(validateBTC)
 
