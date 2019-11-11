@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 Inputs changed from weekly values (7 days) to year long (365 days)
 Same outputs as previous models
 Convolutional network implementation
-Multithreading utilized for building datasets (still slow)
+Multithreading utilized for simulation (still slow)
 '''
 
 def main():
@@ -176,6 +176,7 @@ def main():
     '''
     Evaluating model accuracy on different sets
     '''
+    print("\n-----------------------------------------------------------------")
     print("2000 - 2019 Results:")
     model.evaluate(inputs, outputs, verbose=2)
     print("1990 - 2000 Results:")
@@ -216,7 +217,7 @@ def main():
     t.start()
     threads.append(t)
 
-    t = threading.Thread(target=simulate, args=(results4, model, recentData, recentInput, recentOutput, 1, 0.75, 0, len(inputs)))
+    t = threading.Thread(target=simulate, args=(results4, model, recentData, recentInput, recentOutput, 1, 0.75, 0, len(recentInput)))
     t.start()
     threads.append(t)
 
