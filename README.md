@@ -7,6 +7,6 @@
 - Pandas 0.25.0
 - Numpy 1.17.3
 
-Model is having issues with recognizing corrections and overfitting.
-
-Apologies for the messy code, this is a work in progress and all of the models are prototypes.
+## Optional
+- Discord 1.0.1 to send predictions via discord bot in liveData.py
+- liveData.py can be modified to only include live data prediction
