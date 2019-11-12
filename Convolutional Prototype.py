@@ -18,24 +18,24 @@ def main():
     epochCount = 0
 
     print("Loading Model")
-    model = tf.keras.models.load_model('Conv.h5') #load from presaved model
+    model = tf.keras.models.load_model('Model/Conv.h5') #load from presaved model
     #model = genModel() #uncomment to generate new model
 
     #loading raw data for simulation
     print("\nRaw Data")
     print("-----------------------------------------------------------------")
-    recentData = loadDataRaw("recent.csv") #unused
-    data = loadDataRaw("Data.csv") #S&P 2000-2019
-    validationData = loadDataRaw("Data2.csv") #S&P 1980-2000
-    BTCData = loadDataRaw("BTC.csv") #BTC data where volume > 0
+    recentData = loadDataRaw("Data/recent.csv") #unused
+    data = loadDataRaw("Data/Data.csv") #S&P 2000-2019
+    validationData = loadDataRaw("Data/Data2.csv") #S&P 1980-2000
+    BTCData = loadDataRaw("Data/BTC.csv") #BTC data where volume > 0
 
     #loading different datasets
     print("\nDatasets")
     print("-----------------------------------------------------------------")
-    validateRecent = loadData("validateRecent.csv")
-    train = loadData("train.csv") 
-    validate = loadData("validate.csv")
-    validateBTC = loadData("validateBTC.csv")
+    validateRecent = loadData("Data/validateRecent.csv")
+    train = loadData("Data/train.csv") 
+    validate = loadData("Data/validate.csv")
+    validateBTC = loadData("Data/validateBTC.csv")
 
     print("-----------------------------------------------------------------")
     print(model.summary()) #preview of model structure
@@ -82,8 +82,8 @@ def main():
         recentOutput.append(validateRecent.loc[i][365:367])
     
 
-    allInputs = inputs
-    allOutputs = outputs
+    allInputs = inputs + inputBTC
+    allOutputs = outputs + outputBTC
                          
     '''
     End of generating training set
@@ -147,7 +147,7 @@ def main():
     #train using batch size 64
     model.fit(allInputs, allOutputs, batch_size = 64, epochs=epochCount, use_multiprocessing = True, verbose=2)
     print("Saving model")
-    model.save('Conv.h5') #save trained model
+    model.save('Model/Conv.h5') #save trained model
     #testing on validation sets
 
     '''
@@ -167,7 +167,7 @@ def main():
 
     recentInput = np.expand_dims(recentInput, axis=2)
     recentInput = np.array(recentInput)
-    recentOutput = np.array(outputBTC)
+    recentOutput = np.array(recentOutput)
     
     '''
     End of formatting datasets
@@ -177,6 +177,8 @@ def main():
     Evaluating model accuracy on different sets
     '''
     print("\n-----------------------------------------------------------------")
+    print("Recent S&P Results")
+    model.evaluate(recentInput, recentOutput, verbose=2)
     print("2000 - 2019 Results:")
     model.evaluate(inputs, outputs, verbose=2)
     print("1990 - 2000 Results:")
@@ -205,21 +207,21 @@ def main():
     
     threads = []
     
-    t = threading.Thread(target=simulate, args=(results, model, data, inputs, outputs, 1, 0.75, 0, len(inputs)))
-    t.start()
-    threads.append(t)
+    t1 = threading.Thread(target=simulate, args=(results, model, data, inputs, outputs, 1, 0.75, 0, len(inputs)))
+    t1.start()
+    threads.append(t1)
     
-    t = threading.Thread(target=simulate, args=(results2, model, validationData, inputValidate, outputValidate, 1, 0.75, 0, len(inputValidate)))
-    t.start()
-    threads.append(t)
+    t2 = threading.Thread(target=simulate, args=(results2, model, validationData, inputValidate, outputValidate, 1, 0.75, 0, len(inputValidate)))
+    t2.start()
+    threads.append(t2)
 
-    t = threading.Thread(target=simulate, args=(results3, model, BTCData, inputBTC, outputBTC, 1, 0.75, 0, len(inputBTC)))
-    t.start()
-    threads.append(t)
+    t3 = threading.Thread(target=simulate, args=(results3, model, BTCData, inputBTC, outputBTC, 1, 0.75, 0, len(inputBTC)))
+    t3.start()
+    threads.append(t3)
 
-    t = threading.Thread(target=simulate, args=(results4, model, recentData, recentInput, recentOutput, 1, 0.75, 0, len(recentInput)))
-    t.start()
-    threads.append(t)
+    t4 = threading.Thread(target=simulate, args=(results4, model, recentData, recentInput, recentOutput, 1, 0.75, 0, len(recentInput)))
+    t4.start()
+    threads.append(t4)
 
     #rejoining simulation threads before plotting
     for proc in threads:
@@ -257,7 +259,11 @@ def main():
 def genModel():
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.InputLayer(input_shape=(365,1)))
-    
+
+    model.add(tf.keras.layers.Conv1D(kernel_size=3, filters=64, activation='tanh'))
+    model.add(tf.keras.layers.AveragePooling1D(pool_size=2,strides=1))
+    model.add(tf.keras.layers.Conv1D(kernel_size=3, filters=32, activation='tanh'))
+    model.add(tf.keras.layers.AveragePooling1D(pool_size=2,strides=1))
     model.add(tf.keras.layers.Conv1D(kernel_size=3, filters=16, activation='tanh'))
     
     model.add(tf.keras.layers.AveragePooling1D(pool_size=2,strides=2))
@@ -372,7 +378,7 @@ def simulate(results, model, data, inputs, outputs, buyIn, threshold, entryDay, 
     results.append(economy)
 
 #simulate automated trading using given model and input data
-def simulateExper(results, model, data, inputs, outputs, buyIn, threshold, entryDay, exitDay):
+def simulateLowRisk(results, model, data, inputs, outputs, buyIn, threshold, entryDay, exitDay):
     money = (buyIn+0)
     market = (buyIn + 0)
     curr = 0

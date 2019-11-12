@@ -5,10 +5,10 @@ import threading
 def main():
 
     #loading different datasets
-    recent = loadData("recent.csv") #unused
-    data = loadData("Data.csv") #S&P 2000-2019
-    validationData = loadData("Data2.csv") #S&P 1980-2000
-    BTCData = loadData("BTC.csv") #BTC data where volume > 0
+    recent = loadData("Data/recent.csv") #Most recent S&P Data
+    data = loadData("Data/Data.csv") #S&P 2000-2019
+    validationData = loadData("Data/Data2.csv") #S&P 1980-2000
+    BTCData = loadData("Data/BTC.csv") #BTC data where volume > 0
 
     print("Building Set")
 
@@ -56,7 +56,7 @@ def main():
 
     with open('validateRecent.csv', 'w', newline='') as f:
         wtr = csv.writer(f, delimiter= ',')
-        wtr.writerows(validateBTC)
+        wtr.writerows(validateRecent)
 
 
 #builds a dataset given data is greater than 365
@@ -85,10 +85,10 @@ def buildDatasetHelper(rows, data, i):
         for j in range(i, i+365):
             temp.append(data["Change"][j]/m) #insert into temp input array
         future = data["Change"][i+365] #value we want to predict
-        if future > 0: #if bullish, set expected output to 1
+        if future > 0: #if bullish, set expected output to 1,0
             temp.append(1)
             temp.append(0)
-        elif future < 0: #else if bearish, set expected output to -1
+        elif future < 0: #else if bearish, set expected output to 0,1
             temp.append(0)
             temp.append(1)
         else: #else the percent change is 0, set expected output to 0
